@@ -1,6 +1,6 @@
 # repmgr-rs
 
-== Intro
+## Intro
 You could describe the original repmgr, as a framework to provide HA capabilities
 for postgres. It started long time ago, it's been on production for many year
 but its main repository seems dead for quite a long time.
@@ -15,7 +15,7 @@ for some, repmgr was able to do simple stuff with postgres clusters like registe
 a primary and many replicas, provide some sort of cluster status and even
 automatic failover.
 
-== Objectives of repmgr-rs
+## Objectives of repmgr-rs
 
 repmgr-rs is a project I started on my own personal guidance and resources that
 exists at the moment to fullfil 2 main goals:
@@ -27,7 +27,7 @@ some of my skills I've developed through the years and have fun in the process.
 It doesn't aim to replace repmgr in current production systems but that's
 something it could be done in the long term though.
 
-== Use of LLMs
+## Use of LLMs
 
 To be trustful to one of my goals, I've been using some LLMs to do some internal
 research about the decisions made in the architecture and to help creating the

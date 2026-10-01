@@ -15,6 +15,7 @@ Source root: `~/repmgr-5.5.0/`. Read access there is scoped to `~/repmgr*` paths
 2. Useful anchors already known from prior investigation (reuse before re-deriving):
    - Config grammar + schema table: `configfile-scan.l`, `configdata.c`, `configfile.c` (`parse_configuration_item`, `CONF_scanstr`)
    - Defaults and limits: `repmgr.h` (`DEFAULT_*` macros), `configfile.h` (`t_configuration_options` struct)
+   - Extension SQL functions (all 18, with C impl, callers, and repmgr-rs implications): already inventoried in `/home/mario/rust/repmgr-rs/llm/EXTENSION_FUNCTIONS.md` — read that first
    - Cluster registry schema: `repmgr--5.5.sql` (always read the latest-versioned `repmgr--X.Y.sql`, not the incremental `--A--B.sql` migration diffs, for current shape)
    - Failover/election engine: `repmgrd-physical.c` (search function names: `do_election`, `do_primary_failover`, `do_upstream_standby_failover`, `promote_self`, `follow_new_primary`, `check_primary_child_nodes`), `voting.h`
    - Node identity independent of registry: `controldata.c` (binary `pg_control` reader)
