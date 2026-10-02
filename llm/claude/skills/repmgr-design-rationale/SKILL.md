@@ -38,12 +38,16 @@ need, or nothing.
    - independent design, not wire/schema-compatible with real repmgr
    - Mario writes all repmgr-rs `src/` code himself; this skill investigates and recommends, it
      never writes implementation code
-   - no equivalent of a loaded Postgres C extension planned — daemon-side state is an ordinary
-     process, not code embedded in the Postgres backend, so backend-only constraints (hot-standby
-     write rules, `shared_preload_libraries`, `PG_MODULE_MAGIC`) may simply not apply
-   - built on tokio + tokio-postgres (async I/O available for free, where upstream hand-rolls
-     busy-wait loops over blocking libpq)
-   - targets PostgreSQL 19 only (confirmed 2026-09-25) — no multi-version compatibility matrix
+   - repmgr-rs has its own Postgres extension (`pg/`, pgrx) that keeps node state in shared
+     memory (`PgLwLock<RepmgrNode>`), like upstream's `repmgrdSharedState`. Backend-only
+     constraints (`shared_preload_libraries`, `PG_MODULE_MAGIC`, hot-standby write rules) do
+     apply to that crate. An earlier design with no extension and daemon-held state was dropped
+     (changed 2026-10-02).
+   - the CLI (`cli/`, and any future daemon) is built on tokio + tokio-postgres (async I/O
+     available for free, where upstream hand-rolls busy-wait loops over blocking libpq). The
+     `pg/` extension is not: it runs inside the Postgres backend, which is single-threaded and
+     synchronous, so no tokio there.
+   - targets PostgreSQL 18 only (corrected 2026-10-02; older versions may come later, out of scope for now) — no multi-version compatibility matrix
      to design around today
 
 4. **Give a plain verdict**, not just an explanation: does repmgr-rs need an equivalent
