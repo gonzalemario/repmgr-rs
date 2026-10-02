@@ -77,7 +77,9 @@ the primary key of `repmgr.nodes`. It has no usable default: the config default 
   `-1` / `UNKNOWN_NODE_ID` for a few).
 - The struct is initialised in `repmgr_shmem_startup` (`repmgr.c:167-210`): node ids `-1`,
   pid `-1`, `upstream_last_seen = POSTGRES_EPOCH_JDATE` (a magic "never set" value),
-  `voting_status = VS_NO_VOTE`.
+  `voting_status = VS_NO_VOTE`, `current_electoral_term = 0`. `last_updated` is **never
+  initialised**. `POSTGRES_EPOCH_JDATE` is a Julian day number (2451545) stored in a
+  microsecond `TimestampTz`. It works only because callers compare against that exact value.
 - **Lifetime:** the state survives a repmgrd restart but is lost on a Postgres restart. The one
   exception is the pause flag, which is also written to `pg_stat/repmgrd_state.txt` as
   `"<node_id>:<0|1>"` (`repmgr.c:52`, `:650-700`) and read back on the next `set_local_node_id`
@@ -133,9 +135,10 @@ Notes:
   sibling's shared memory over an ordinary libpq connection, and each sibling's repmgrd reads its
   own mailbox. Nothing is pushed to the daemon itself. The receiver only notices the message
   through polling, which adds up to one poll interval of latency.
-- `voting_status` and `current_electoral_term` live in the struct, but only
-  `reset_voting_status` touches them through SQL. Nothing sets them, and
-  `current_electoral_term` is never read. The real term counter is the `repmgr.voting_term` table.
+- `voting_status` and `current_electoral_term` live in the struct, but neither is ever read.
+  `reset_voting_status` writes `voting_status` (to `VS_NO_VOTE`). Nothing writes
+  `current_electoral_term` after init. The real term counter is the `repmgr.voting_term` table,
+  and every `primary register` resets it to 1 (`dbutils.c:5313-5326`).
 - The mailbox only works if the sibling's Postgres is up **and** repmgr is preloaded there. If the
   sibling's repmgrd is down, the message sits until reset. The witness note at
   `repmgr-action-standby.c:8730-8735` says this outright: "if repmgrd is not running … this will have
@@ -180,20 +183,21 @@ shared state. It needs the library loaded only for that reason.
 4. **A capability probe** ("is repmgr preloaded here?") via a NULL return.
 5. **Backend internals** (`WalRcv->pid`) without needing the stats views.
 
-## Implications for repmgr-rs (no Postgres extension planned)
+## Implications for repmgr-rs
 
 All five jobs come from one fact: Postgres is the only endpoint every repmgr component can reach.
-If repmgr-rs daemons have their own listener (gRPC/HTTP/whatever), most of this goes away.
+repmgr-rs follows the same model: its `pg/` extension keeps node state in shared memory. The
+question for each need is whether to copy upstream's mechanism or fix its known weak spots.
 
-| Need | Upstream mechanism | repmgr-rs options |
+| Need | Upstream mechanism | repmgr-rs notes |
 |---|---|---|
-| Per-node daemon state readable by others | shmem via SQL | the daemon serves its own state directly; nothing needs to live inside Postgres |
-| Failover result propagation | `notify_follow_primary` mailbox + 1 s polling | direct daemon-to-daemon message (push, ack-able). **Open design question:** upstream's mailbox still delivers if the sibling *daemon* is down but its Postgres is up. Direct messaging loses that, so a restarted daemon must derive the new primary itself |
-| CLI → daemon pause / status | shmem + `pg_stat/repmgrd_state.txt` | a control socket or API on the daemon. Pause must still survive restarts (upstream persists it). Decide where it's stored and whether it should survive a *Postgres* restart, a daemon restart, or both |
-| "Is daemon alive" | pid + `kill(pid,0)` on the same host | a daemon health endpoint. This also avoids upstream's PID-reuse and same-host assumptions |
-| Last-seen-upstream / staleness | `upstream_last_seen` in shmem | held in daemon memory and reported over its API. Ties into the topology-staleness question in `repmgr-topology-review` |
-| Sibling WAL-receiver check during failover | `get_wal_receiver_pid()` per sibling | `pg_stat_wal_receiver` over SQL (check which columns are visible to a non-superuser role on PG 19), or ask the sibling daemon |
-| Library-loaded probe | NULL from `get_local_node_id` | not needed |
+| Per-node daemon state readable by others | shmem via SQL | same model (`RepmgrNode` in a `PgLwLock`). Decide which fields are needed; upstream has two dead ones |
+| Failover result propagation | `notify_follow_primary` mailbox + 1 s polling | the mailbox can be copied as is. It keeps upstream's strength: messages still arrive while the sibling's daemon is down. It also keeps the polling delay. Reset the mailbox atomically: upstream drops the shared lock and takes the exclusive one in between |
+| CLI → daemon pause / status | shmem + `pg_stat/repmgrd_state.txt` | same model. Pause must survive a Postgres restart, so it needs a file or table next to the shmem. Upstream ignores a pause file written while `local_node_id` was -1 |
+| "Is daemon alive" | pid + `kill(pid,0)` on the same host | if copied, add protection against PID reuse (e.g. store the process start time with the pid). Don't call `kill()` from the CLI host |
+| Last-seen-upstream / staleness | `upstream_last_seen` in shmem | clear it at promotion instead of relying on readers to check `pg_is_in_recovery()` (see VERIFICATION.md). Ties into the topology-staleness question in `repmgr-topology-review` |
+| Sibling WAL-receiver check during failover | `get_wal_receiver_pid()` per sibling | `pg_stat_wal_receiver` over SQL (check which columns are visible to a non-superuser role on PG 18), or ask the sibling daemon |
+| Library-loaded probe | NULL from `get_local_node_id` | `_PG_init` raises an error when the library isn't preloaded, which is a different probe. Decide whether the CLI should get NULL, as upstream does, or that error |
 
 ### Verification candidates (for `VERIFICATION.md`)
 
