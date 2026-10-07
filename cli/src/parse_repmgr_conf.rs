@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use std::process;
 
-fn parse_value_thats_next_to_key(mut value: String) -> String {
+fn parse_value_thats_next_to_key(value: String) -> String {
     /*
      * a line in the config might be something like:
      * conninfo='db=random host=non-local user=notme' #This is a comment in the config
@@ -32,13 +32,7 @@ fn handle_line(mut splitted_line: Vec<&str>, config: &mut HashMap<String, String
     config.insert(key, value);
 }
 
-pub fn parse_file(fname: String) -> HashMap<String, String> {
-    let file = File::open(fname);
-    let file = match file {
-        Ok(file) => file,
-        Err(e) => panic!("File not found?: {}", e),
-    };
-
+pub fn parse_file(file: File) -> HashMap<String, String> {
     let buffer = BufReader::new(file);
     let mut rp_global_config = HashMap::new();
 
