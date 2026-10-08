@@ -1,7 +1,12 @@
 [package]
-name = "cli"
+name = "repmgr-cli"
 version = "0.1.0"
 edition = "2024"
+default-run = "repmgr"
+
+[[bin]]
+name = "repmgr"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
