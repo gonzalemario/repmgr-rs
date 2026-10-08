@@ -1,10 +1,12 @@
 [package]
-name = "repmgr"
+name = "repmgr-pg"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
+name = "repmgr"
 crate-type = ["cdylib"]
+path = "src/lib.rs"
 
 [features]
 default = ["pg18"]
